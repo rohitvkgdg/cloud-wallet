@@ -1,12 +1,17 @@
 import express from "express";
 import { PrismaClient } from "@prisma/client";
 import zod from "zod";
-const jwt = require("jsonwebtoken");
-import { Keypair } from "@solana/web3.js";
+import jwt from "jsonwebtoken";
+import { Connection, Keypair, Transaction } from "@solana/web3.js";
+import bs58 from "bs58"
+import cors from "cors"
 
 const app = express();
 app.use(express.json());
+app.use(cors());
+
 const prisma = new PrismaClient();
+const connection = new Connection("https://solana-devnet.g.alchemy.com/v2/ep5RWlEUIWdHY4jnQBpu1q3lQunOmLwE")
 const JWT_SECRET = "secret";
 
 app.post("/api/v1/login", async (req, res) => {
@@ -22,14 +27,14 @@ app.post("/api/v1/login", async (req, res) => {
     if(!user) {
         res.status(400).send("User not found, please register");
     }
-    if(!prisma.user.findUnique({ where: { username, password } })) {
+    const checkPassword = await prisma.user.findFirst({ where: { username, password } })
+    if(checkPassword) {
+        const token = jwt.sign({ username }, JWT_SECRET);
+        res.send("Login successful\nToken: " + token);
+    }
+    else{
         res.status(400).send("Invalid username or password");
     }
-    const token = jwt.sign({
-        id: user
-    }, JWT_SECRET);
-
-    res.json(token);
     
 });
 
@@ -42,24 +47,47 @@ app.post("/api/v1/register", async (req, res) => {
     if(!schema.safeParse(req.body)) {
         res.status(400).send("Invalid input");
     }
-    if(await prisma.user.findUnique({ where: { username } })) {
+    const user = await prisma.user.findUnique({ where: { username } })
+    if(user) {
         res.status(400).send("Username already exists, please login");
     }
-    const keypair = new Keypair();
-    await prisma.user.create({
-        data: {
-            username,
-            password,
-            publicKey: keypair.publicKey.toString(),
-            privateKey: keypair.secretKey.toString(),
-        },
-    });
-    res.send("Registration successful\nPublic Key: " + keypair.publicKey.toString());
+    else{
+        const keypair = new Keypair();
+        await prisma.user.create({
+            data: {
+                username,
+                password,
+                publicKey: keypair.publicKey.toString(),
+                privateKey: keypair.secretKey.toString(),
+            },
+        });
+        res.send("Registration successful\nPublic Key: " + keypair.publicKey.toString());
+    }
 });
 
-app.post("/api/v1/txn/sign", (req, res) => {
+app.post("/api/v1/txn/sign", async (req, res) => {
+    const serializedTxn = req.body.message;
+    const txn = Transaction.from(Buffer.from(serializedTxn))
+    const user = await prisma.user.findFirst({
+        where: {
+            username: req.body.username
+        },
+        select:{
+            privateKey: true
+        }
+    })
+    const privateKeyArray = user!.privateKey.split(',').map(num => parseInt(num));
+    const secretKey = new Uint8Array(privateKeyArray);
 
-    res.send("Transaction sign successful");
+    const keypair = Keypair.fromSecretKey(secretKey);
+    const { blockhash } = await connection.getLatestBlockhash()
+    txn.recentBlockhash = blockhash
+    txn.feePayer = keypair.publicKey
+
+    txn.sign(keypair)
+
+    const signature = await connection.sendTransaction(txn, [keypair]);
+    res.send("Transaction sign successful\nSignature: " + signature);
 });
 
 app.get("/api/v1/txn/:id", (req, res) => {

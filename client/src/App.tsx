@@ -1,34 +1,34 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import "./App.css"
+import SendSOL from "./components/SendSOL"
+import { useState } from "react"
 
 function App() {
-  const [count, setCount] = useState(0)
-
+  const [toAddress,setToAddress] = useState("")
+  const [amount,setAmount] = useState(0)
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 gap-2">
+      <h1 className="text-4xl mb-10 font-bold">SOL Transfer</h1>
+      <div className="relative">
+        <Input
+        onChange ={(e) => setAmount(parseInt(e.target.value))} 
+        className="peer ps-3 pe-25" placeholder="0.00" type="text" />
+        <span className="text-muted-foreground pointer-events-none absolute inset-y-0 end-0 flex items-center justify-center pe-3 text-sm peer-disabled:opacity-50">
+          SOL
+        </span>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
+      <div className="relative">
+        <Input 
+        onChange={(e) => setToAddress(e.target.value)}
+        className="peer ps-3 pe-25" placeholder="" type="text" />
+        <span className="text-muted-foreground pointer-events-none absolute inset-y-0 end-0 flex items-center justify-center pe-3 text-sm peer-disabled:opacity-50">
+          Address
+        </span>
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+      <Button 
+      onClick={() => SendSOL(toAddress, amount)}>Submit</Button>
+    </div>
   )
 }
 
