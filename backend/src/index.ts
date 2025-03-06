@@ -3,7 +3,6 @@ import { PrismaClient } from "@prisma/client";
 import zod from "zod";
 import jwt from "jsonwebtoken";
 import { Connection, Keypair, Transaction } from "@solana/web3.js";
-import bs58 from "bs58"
 import cors from "cors"
 
 const app = express();
@@ -66,28 +65,43 @@ app.post("/api/v1/register", async (req, res) => {
 });
 
 app.post("/api/v1/txn/sign", async (req, res) => {
-    const serializedTxn = req.body.message;
-    const txn = Transaction.from(Buffer.from(serializedTxn))
-    const user = await prisma.user.findFirst({
-        where: {
-            username: req.body.username
-        },
-        select:{
-            privateKey: true
+    try {
+        const serializedTxn = Buffer.from(req.body.message, 'base64'); // Decode base64 string
+        const txn = Transaction.from(serializedTxn);
+        const user = await prisma.user.findFirst({
+            where: {
+                username: req.body.username
+            },
+            select: {
+                privateKey: true
+            }
+        });
+
+        if (!user) {
+            res.status(404).send("User not found");
+            return;
         }
-    })
-    const privateKeyArray = user!.privateKey.split(',').map(num => parseInt(num));
-    const secretKey = new Uint8Array(privateKeyArray);
 
-    const keypair = Keypair.fromSecretKey(secretKey);
-    const { blockhash } = await connection.getLatestBlockhash()
-    txn.recentBlockhash = blockhash
-    txn.feePayer = keypair.publicKey
+        const privateKeyArray = user.privateKey.split(',').map(num => parseInt(num));
+        const secretKey = new Uint8Array(privateKeyArray);
+        const keypair = Keypair.fromSecretKey(secretKey);
 
-    txn.sign(keypair)
+        const { blockhash } = await connection.getLatestBlockhash();
+        txn.recentBlockhash = blockhash;
+        txn.feePayer = keypair.publicKey;
 
-    const signature = await connection.sendTransaction(txn, [keypair]);
-    res.send("Transaction sign successful\nSignature: " + signature);
+        txn.sign(keypair);
+
+        // Log the transaction details for debugging
+        console.log("Transaction details:", txn);
+
+        const signature = await connection.sendTransaction(txn, [keypair]);
+
+        res.send("Transaction sign successful\nSignature: " + signature);
+    } catch (error) {
+        console.error("Error signing transaction:", error);
+        res.status(500).send("Error signing transaction message");
+    }
 });
 
 app.get("/api/v1/txn/:id", (req, res) => {
